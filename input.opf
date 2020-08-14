@@ -12,8 +12,8 @@
 		<meta refines="#creator" property="role" scheme="marc:relators">aut</meta>
 
 		<dc:identifier id="pub-id">urn:isbn:9780316000000</dc:identifier>
-		<meta refines="#pub-id" property="identifier-type" scheme="onix:codelist5">15</meta>
-
+		<meta id="testt" refines="#pub-id" property="identifier-type" scheme="onix:codelist5">15</meta>
+		<meta refines="#testt" property="file-as">fifteen</meta>
 
 		<dc:language>en-US</dc:language>
 

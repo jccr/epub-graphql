@@ -15,39 +15,50 @@ interface Value {
   value: String
 }
 
-type Package implements Node & I18n {
+interface Refines {
+  refines: String
+}
+
+interface MetaAttributes {
+  property: String
+  scheme: String
+}
+
+interface MetaProperties {
+  alternateScript: Meta
+  displaySeq: Meta
+  fileAs: Meta
+  groupPosition: Meta
+  metaAuth: Meta @deprecated
+}
+
+interface Resource {
+  href: String
+  mediaType: String
+}
+
+interface PropertiesList {
+  properties: [String]
+}
+
+type Meta implements Node & Value & I18n & Refines & MetaAttributes & MetaProperties {
   id: ID
+
+  value: String
 
   dir: String
   lang: String
 
-  version: String
-  uniqueIdentifier: Identifier
+  refines: String
 
-  metadata: Metadata
-  manifest: Manifest
-  spine: Spine
-}
+  property: String
+  scheme: String
 
-type Metadata {
-  identifier: Identifier
-  title: [Title]
-  language: [Language]
-
-  contributor: [Contributor]
-  coverage: [Coverage]
-  creator: [Creator]
-  date: [Date]
-  description: [Description]
-  format: [Format]
-  publisher: [Publisher]
-  relation: [Relation]
-  rights: [Rights]
-  source: [Source]
-  subject: [Subject]
-  type: [Type]
-
-  belongsToCollection: [BelongsToCollection]
+  alternateScript: Meta
+  displaySeq: Meta
+  fileAs: Meta
+  groupPosition: Meta
+  metaAuth: Meta @deprecated
 }
 
 type Identifier implements Node & Value & MetaProperties {
@@ -295,52 +306,6 @@ type BelongsToCollection implements Node & Value & I18n & Refines & MetaAttribut
   belongsToCollection: [BelongsToCollection]
 }
 
-type Meta implements Node & Value & I18n & Refines & MetaAttributes & MetaProperties {
-  id: ID
-
-  value: String
-
-  dir: String
-  lang: String
-
-  refines: String
-
-  property: String
-  scheme: String
-
-  alternateScript: Meta
-  displaySeq: Meta
-  fileAs: Meta
-  groupPosition: Meta
-  metaAuth: Meta @deprecated
-}
-
-interface Refines {
-  refines: String
-}
-
-interface MetaAttributes {
-  property: String
-  scheme: String
-}
-
-interface MetaProperties {
-  alternateScript: Meta
-  displaySeq: Meta
-  fileAs: Meta
-  groupPosition: Meta
-  metaAuth: Meta @deprecated
-}
-
-interface Resource {
-  href: String
-  mediaType: String
-}
-
-interface PropertiesList {
-  properties: [String]
-}
-
 type Link implements Node & Resource & PropertiesList & Refines {
   id: ID
 
@@ -350,6 +315,44 @@ type Link implements Node & Resource & PropertiesList & Refines {
   properties: [String]
 
   refines: String
+}
+
+type Package implements Node & I18n {
+  id: ID
+
+  dir: String
+  lang: String
+
+  prefix: [String]
+
+  version: String
+  uniqueIdentifier: Identifier
+  releaseIdentifier: String
+
+  metadata: Metadata
+  manifest: Manifest
+  spine: Spine
+}
+
+type Metadata {
+  identifier: Identifier
+  title: [Title]
+  language: [Language]
+
+  contributor: [Contributor]
+  coverage: [Coverage]
+  creator: [Creator]
+  date: [Date]
+  description: [Description]
+  format: [Format]
+  publisher: [Publisher]
+  relation: [Relation]
+  rights: [Rights]
+  source: [Source]
+  subject: [Subject]
+  type: [Type]
+
+  belongsToCollection: [BelongsToCollection]
 }
 
 type Manifest implements Node {
@@ -375,15 +378,6 @@ type ManifestItem implements Node & Resource & PropertiesList {
   fallback: ManifestItem
 }
 
-type SpineItem implements Node & PropertiesList {
-  id: ID
-
-  properties: [String]
-
-  idref: ManifestItem
-  linear: Boolean
-}
-
 type Spine implements Node {
   id: ID
 
@@ -396,4 +390,13 @@ type Spine implements Node {
     onlyProperties: [String]
     linear: Boolean
   ): [SpineItem]
+}
+
+type SpineItem implements Node & PropertiesList {
+  id: ID
+
+  properties: [String]
+
+  idref: ManifestItem
+  linear: Boolean
 }
