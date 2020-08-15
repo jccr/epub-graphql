@@ -353,6 +353,8 @@ type Metadata {
   type: [Type]
 
   belongsToCollection: [BelongsToCollection]
+
+  modified: Meta
 }
 
 type Manifest implements Node {

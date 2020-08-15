@@ -36,10 +36,17 @@ class Node {
     return selectAll(expression, this.node)
   }
 
-  readAttribute(expression) {
+  resolveAttribute(expression) {
     const node = this.select(expression)
     if (node) {
       return node.value
+    }
+  }
+
+  resolveNode(expression, constructor, context) {
+    const node = this.select(expression)
+    if (node) {
+      return new constructor(node, context)
     }
   }
 
@@ -56,17 +63,19 @@ class Node {
   }
 }
 
+// Node mixins
+
 const ID = (superclass) =>
   class extends superclass {
     id() {
-      return this.readAttribute('./@id')
+      return this.resolveAttribute('./@id')
     }
   }
 
 const Refines = (superclass) =>
   class extends superclass {
     refines() {
-      return this.readAttribute('./@refines')
+      return this.resolveAttribute('./@refines')
     }
   }
 
@@ -83,18 +92,18 @@ const Value = (superclass) =>
 const I18n = (superclass) =>
   class extends superclass {
     dir() {
-      return this.readAttribute('./@dir')
+      return this.resolveAttribute('./@dir')
     }
 
     lang() {
-      return this.readAttribute('./@xml:lang')
+      return this.resolveAttribute('./@xml:lang')
     }
   }
 
 const PropertiesList = (superclass) =>
   class extends superclass {
     properties() {
-      const properties = this.readAttribute('./@properties')
+      const properties = this.resolveAttribute('./@properties')
       if (properties) {
         //normalize spaces and split space separated words
         return properties.replace(/\s+/g, ' ').split(' ')
@@ -102,65 +111,61 @@ const PropertiesList = (superclass) =>
     }
   }
 
-const MetadataNode = (superclass) =>
-  class extends superclass {
-    constructor(node, metadata) {
-      super(node)
-      this.metadata = metadata
-    }
-  }
-
 const MetaAttributes = (superclass) =>
   class extends superclass {
     property() {
-      return this.readAttribute('./@property')
+      return this.resolveAttribute('./@property')
     }
 
     scheme() {
-      return this.readAttribute('./@scheme')
+      return this.resolveAttribute('./@scheme')
     }
   }
-
-const createMetaOrNull = (context, property) => {
-  const id = context.id()
-  const propertyMap = context.metadata.metaPropertyMap[id]
-  if (!propertyMap) {
-    return null
-  }
-
-  const metaNode = propertyMap[property]
-  if (!metaNode) {
-    return null
-  }
-
-  return new Meta(metaNode, context.metadata)
-}
 
 const MetaProperties = (superclass) =>
   class extends superclass {
+    constructor(node, { metadata }) {
+      super(node)
+      this.metadata = metadata
+    }
+
+    resolveMetaProperty(property) {
+      const id = this.id()
+      const propertyMap = this.metadata.metaPropertyMap[id]
+      if (!propertyMap) {
+        return null
+      }
+
+      const metaNode = propertyMap[property]
+      if (!metaNode) {
+        return null
+      }
+
+      return new Meta(metaNode, { metadata: this.metadata })
+    }
+
     alternateScript() {
-      return createMetaOrNull(this, 'alternate-script')
+      return this.resolveMetaProperty('alternate-script')
     }
 
     displaySeq() {
-      return createMetaOrNull(this, 'display-seq')
+      return this.resolveMetaProperty('display-seq')
     }
 
     fileAs() {
-      return createMetaOrNull(this, 'file-as')
+      return this.resolveMetaProperty('file-as')
     }
 
     groupPosition() {
-      return createMetaOrNull(this, 'group-position')
+      return this.resolveMetaProperty('group-position')
     }
 
     metaAuth() {
-      return createMetaOrNull(this, 'meta-auth')
+      return this.resolveMetaProperty('meta-auth')
     }
   }
 
 class Meta extends mix(Node).with(
-  MetadataNode,
   ID,
   Value,
   I18n,
@@ -196,17 +201,17 @@ const allPropertiesFilter = (allProperties) =>
   attributeContainsWordFilter('@properties', allProperties, 'and')
 
 class Spine extends mix(Node).with(ID) {
-  constructor(node, manifest) {
+  constructor(node, { manifest }) {
     super(node)
     this.manifest = manifest
   }
 
   pageProgressionDirection() {
-    return this.readAttribute('./@page-progression-direction')
+    return this.resolveAttribute('./@page-progression-direction')
   }
 
   toc() {
-    const idref = this.readAttribute('./@toc')
+    const idref = this.resolveAttribute('./@toc')
     if (idref) {
       return toArray(this.manifest.item({ id: idref }))[0]
     }
@@ -234,25 +239,28 @@ class Spine extends mix(Node).with(ID) {
       anyProperties
     )}${allPropertiesFilter(allProperties)}`
 
-    return this.mapAll(expression, (node) => new SpineItem(node, this))
+    return this.mapAll(
+      expression,
+      (node) => new SpineItem(node, { spine: this })
+    )
   }
 }
 
 class SpineItem extends mix(Node).with(ID, PropertiesList) {
-  constructor(node, spine) {
+  constructor(node, { spine }) {
     super(node)
     this.spine = spine
   }
 
   idref() {
-    const idref = this.readAttribute('./@idref')
+    const idref = this.resolveAttribute('./@idref')
     if (idref) {
       return toArray(this.spine.manifest.item({ id: idref }))[0]
     }
   }
 
   linear() {
-    const linear = this.readAttribute('./@linear')
+    const linear = this.resolveAttribute('./@linear')
     if (linear === 'no') {
       return false
     }
@@ -267,22 +275,22 @@ class ManifestItem extends mix(Node).with(ID, PropertiesList) {
   }
 
   href() {
-    return this.readAttribute('./@href')
+    return this.resolveAttribute('./@href')
   }
 
   mediaType() {
-    return this.readAttribute('./@media-type')
+    return this.resolveAttribute('./@media-type')
   }
 
   mediaOverlay() {
-    const idref = this.readAttribute('./@media-overlay')
+    const idref = this.resolveAttribute('./@media-overlay')
     if (idref) {
       return toArray(this.manifest.item({ id: idref }))[0]
     }
   }
 
   fallback() {
-    const idref = this.readAttribute('./@fallback')
+    const idref = this.resolveAttribute('./@fallback')
     if (idref) {
       return toArray(this.manifest.item({ id: idref }))[0]
     }
@@ -307,14 +315,9 @@ class Manifest extends mix(Node).with(ID) {
   }
 }
 
-class Identifier extends mix(Node).with(
-  MetadataNode,
-  ID,
-  Value,
-  MetaProperties
-) {
+class Identifier extends mix(Node).with(ID, Value, MetaProperties) {
   identifierType() {
-    return createMetaOrNull(this, 'identifier-type')
+    return this.resolveMetaProperty('identifier-type')
   }
 }
 
@@ -353,9 +356,19 @@ class Metadata extends Node {
     })
   }
 
-  identifier() {
-    const node = this.select('./dc:identifier')
-    return new Identifier(node, this)
+  identifier({ id }) {
+    return this.resolveNode(`./dc:identifier${idFilter(id)}`, Identifier, {
+      metadata: this,
+    })
+  }
+
+  modified() {
+    const node = this.select(
+      "./opf:meta[@property='dcterms:modified' and not(@refines)]"
+    )
+    if (node) {
+      return new Meta(node, { metadata: this })
+    }
   }
 }
 
@@ -365,29 +378,37 @@ export class Package extends mix(Node).with(ID, I18n) {
   }
 
   version() {
-    return this.readAttribute('./@version')
+    return this.resolveAttribute('./@version')
   }
 
   uniqueIdentifier() {
-    return null
+    const uniqueIdentifierIDRef = this.resolveAttribute('./@unique-identifier')
+    if (uniqueIdentifierIDRef) {
+      return this.metadata().identifier({ id: uniqueIdentifierIDRef })
+    }
   }
 
   releaseIdentifier() {
-    return null
+    const uniqueIdentifier = this.uniqueIdentifier()
+    const modified = this.metadata().modified()
+    if (uniqueIdentifier && modified) {
+      return `${uniqueIdentifier.value()}@${modified.value()}`
+    }
   }
 
   metadata() {
-    const node = this.select('./opf:metadata')
-    return new Metadata(node)
+    return (this._metadata =
+      this._metadata || this.resolveNode('./opf:metadata', Metadata, {}))
   }
 
   spine() {
-    const node = this.select('./opf:spine')
-    return new Spine(node, this.manifest())
+    return (this._spine =
+      this._spine ||
+      this.resolveNode('./opf:spine', Spine, { manifest: this.manifest() }))
   }
 
   manifest() {
-    const node = this.select('./opf:manifest')
-    return new Manifest(node)
+    return (this._manifest =
+      this._manifest || this.resolveNode('./opf:manifest', Manifest, {}))
   }
 }
