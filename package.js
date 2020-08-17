@@ -24,8 +24,9 @@ const select = function (expression, node) {
 }
 
 class Node {
-  constructor(node) {
+  constructor(node, context) {
     this.node = node
+    this.context = context
   }
 
   select(expression) {
@@ -36,48 +37,34 @@ class Node {
     return selectAll(expression, this.node)
   }
 
-  resolveAttribute(expression) {
+  resolve(expression, constructor = null) {
     const node = this.select(expression)
-    if (node) {
-      return node.value
+    if (!node) {
+      return null
     }
+    if (constructor) {
+      return new constructor(node, this.context)
+    }
+    return node.value
   }
 
-  resolveNode(expression, constructor, context) {
-    const node = this.select(expression)
-    if (node) {
-      return new constructor(node, context)
-    }
-  }
-
-  map(expression, constructor) {
-    const node = this.select(expression)
-    if (node) {
-      return constructor(node)
-    }
-  }
-
-  mapAll(expression, constructor) {
+  resolveAll(expression, constructor = null) {
     const nodes = this.selectAll(expression)
-    return nodes.map((node) => constructor(node))
+    if (!nodes) {
+      return null
+    }
+    if (constructor) {
+      return nodes.map((node) => new constructor(node, this.context))
+    }
+    return nodes.map((node) => node.value)
+  }
+
+  id() {
+    return this.resolve('./@id')
   }
 }
 
 // Node mixins
-
-const ID = (superclass) =>
-  class extends superclass {
-    id() {
-      return this.resolveAttribute('./@id')
-    }
-  }
-
-const Refines = (superclass) =>
-  class extends superclass {
-    refines() {
-      return this.resolveAttribute('./@refines')
-    }
-  }
 
 const Value = (superclass) =>
   class extends superclass {
@@ -92,18 +79,53 @@ const Value = (superclass) =>
 const I18n = (superclass) =>
   class extends superclass {
     dir() {
-      return this.resolveAttribute('./@dir')
+      return (
+        this.resolve('./@dir') ||
+        this.resolve('../@dir') ||
+        this.context.resolve('./@dir')
+      )
     }
 
     lang() {
-      return this.resolveAttribute('./@xml:lang')
+      return (
+        this.resolve('./@xml:lang') ||
+        this.resolve('../@xml:lang') ||
+        this.context.resolve('./@xml:lang')
+      )
+    }
+  }
+
+const Resource = (superclass) =>
+  class extends superclass {
+    href() {
+      return this.resolve('./@href')
+    }
+
+    mediaType() {
+      return this.resolve('./@media-type')
+    }
+  }
+
+const Refines = (superclass) =>
+  class extends superclass {
+    refines() {
+      const refines = this.resolve('./@refines')
+      if (!refines) {
+        return null
+      }
+
+      // drop the # prefix
+      return refines[0] === '#' ? refines.substr(1) : refines
+
+      // TODO: Resolve the reference...
+      // return this.context.resolve(`//*[@id='${idRefined}']`, Node)
     }
   }
 
 const PropertiesList = (superclass) =>
   class extends superclass {
     properties() {
-      const properties = this.resolveAttribute('./@properties')
+      const properties = this.resolve('./@properties')
       if (properties) {
         //normalize spaces and split space separated words
         return properties.replace(/\s+/g, ' ').split(' ')
@@ -114,59 +136,44 @@ const PropertiesList = (superclass) =>
 const MetaAttributes = (superclass) =>
   class extends superclass {
     property() {
-      return this.resolveAttribute('./@property')
+      return this.resolve('./@property')
     }
 
     scheme() {
-      return this.resolveAttribute('./@scheme')
+      return this.resolve('./@scheme')
     }
   }
 
 const MetaProperties = (superclass) =>
   class extends superclass {
-    constructor(node, { metadata }) {
-      super(node)
-      this.metadata = metadata
-    }
-
-    resolveMetaProperty(property) {
-      const id = this.id()
-      const propertyMap = this.metadata.metaPropertyMap[id]
-      if (!propertyMap) {
-        return null
-      }
-
-      const metaNode = propertyMap[property]
-      if (!metaNode) {
-        return null
-      }
-
-      return new Meta(metaNode, { metadata: this.metadata })
-    }
-
     alternateScript() {
-      return this.resolveMetaProperty('alternate-script')
+      return this.context
+        .metadata()
+        .resolveMetaPropertyAll(this.id(), 'alternate-script')
     }
 
     displaySeq() {
-      return this.resolveMetaProperty('display-seq')
+      return this.context
+        .metadata()
+        .resolveMetaProperty(this.id(), 'display-seq')
     }
 
     fileAs() {
-      return this.resolveMetaProperty('file-as')
+      return this.context.metadata().resolveMetaProperty(this.id(), 'file-as')
     }
 
     groupPosition() {
-      return this.resolveMetaProperty('group-position')
+      return this.context
+        .metadata()
+        .resolveMetaProperty(this.id(), 'group-position')
     }
 
     metaAuth() {
-      return this.resolveMetaProperty('meta-auth')
+      return this.context.metadata().resolveMetaProperty(this.id(), 'meta-auth')
     }
   }
 
 class Meta extends mix(Node).with(
-  ID,
   Value,
   I18n,
   Refines,
@@ -174,18 +181,25 @@ class Meta extends mix(Node).with(
   MetaProperties
 ) {}
 
-const toArray = (valueOrArray) =>
-  Array.isArray(valueOrArray) ? valueOrArray : [valueOrArray]
+const toArray = (valueOrArray) => {
+  if (!valueOrArray) {
+    return []
+  }
+  if (Array.isArray(valueOrArray)) {
+    return valueOrArray
+  }
+  return [valueOrArray]
+}
 
-const attributeFilter = (attribute, values, operator) =>
-  values
+const attributeFilter = (attribute, values, operator = 'or') =>
+  values && values.length
     ? `[${toArray(values)
         .map((value) => `${attribute}='${value}'`)
         .join(` ${operator} `)}]`
     : ''
 
 const attributeContainsWordFilter = (attribute, words, operator) =>
-  words
+  words && words.length
     ? `[${toArray(words)
         .map(
           (value) =>
@@ -194,26 +208,27 @@ const attributeContainsWordFilter = (attribute, words, operator) =>
         .join(` ${operator} `)}]`
     : ''
 
-const idFilter = (id) => attributeFilter('@id', id, 'or')
+const idFilter = (id) => attributeFilter('@id', id)
+
 const anyPropertiesFilter = (anyProperties) =>
   attributeContainsWordFilter('@properties', anyProperties, 'or')
 const allPropertiesFilter = (allProperties) =>
   attributeContainsWordFilter('@properties', allProperties, 'and')
 
-class Spine extends mix(Node).with(ID) {
-  constructor(node, { manifest }) {
-    super(node)
-    this.manifest = manifest
-  }
+const anyRelFilter = (anyProperties) =>
+  attributeContainsWordFilter('@rel', anyProperties, 'or')
+const allRelFilter = (allProperties) =>
+  attributeContainsWordFilter('@rel', allProperties, 'and')
 
+class Spine extends Node {
   pageProgressionDirection() {
-    return this.resolveAttribute('./@page-progression-direction')
+    return this.resolve('./@page-progression-direction')
   }
 
   toc() {
-    const idref = this.resolveAttribute('./@toc')
+    const idref = this.resolve('./@toc')
     if (idref) {
-      return toArray(this.manifest.item({ id: idref }))[0]
+      return toArray(this.context.manifest().item({ id: idref }))[0]
     }
   }
 
@@ -232,35 +247,29 @@ class Spine extends mix(Node).with(ID) {
         id,
         anyProperties,
         allProperties: onlyProperties,
-      }).filter((item) => item.properties().length === onlyProperties.length)
+      }).filter(
+        (item) => toArray(item.properties()).length === onlyProperties.length
+      )
     }
 
     const expression = `./opf:itemref${idFilter(id)}${anyPropertiesFilter(
       anyProperties
     )}${allPropertiesFilter(allProperties)}`
 
-    return this.mapAll(
-      expression,
-      (node) => new SpineItem(node, { spine: this })
-    )
+    return this.resolveAll(expression, SpineItem)
   }
 }
 
-class SpineItem extends mix(Node).with(ID, PropertiesList) {
-  constructor(node, { spine }) {
-    super(node)
-    this.spine = spine
-  }
-
+class SpineItem extends mix(Node).with(PropertiesList) {
   idref() {
-    const idref = this.resolveAttribute('./@idref')
+    const idref = this.resolve('./@idref')
     if (idref) {
-      return toArray(this.spine.manifest.item({ id: idref }))[0]
+      return toArray(this.context.manifest().item({ id: idref }))[0]
     }
   }
 
   linear() {
-    const linear = this.resolveAttribute('./@linear')
+    const linear = this.resolve('./@linear')
     if (linear === 'no') {
       return false
     }
@@ -268,62 +277,136 @@ class SpineItem extends mix(Node).with(ID, PropertiesList) {
   }
 }
 
-class ManifestItem extends mix(Node).with(ID, PropertiesList) {
-  constructor(node, manifest) {
-    super(node)
-    this.manifest = manifest
-  }
-
-  href() {
-    return this.resolveAttribute('./@href')
-  }
-
-  mediaType() {
-    return this.resolveAttribute('./@media-type')
-  }
-
+class ManifestItem extends mix(Node).with(Resource, PropertiesList) {
   mediaOverlay() {
-    const idref = this.resolveAttribute('./@media-overlay')
+    const idref = this.resolve('./@media-overlay')
     if (idref) {
-      return toArray(this.manifest.item({ id: idref }))[0]
+      return toArray(this.context.manifest().item({ id: idref }))[0]
     }
   }
 
   fallback() {
-    const idref = this.resolveAttribute('./@fallback')
+    const idref = this.resolve('./@fallback')
     if (idref) {
-      return toArray(this.manifest.item({ id: idref }))[0]
+      return toArray(this.context.manifest().item({ id: idref }))[0]
     }
   }
 }
 
-class Manifest extends mix(Node).with(ID) {
-  item({ id, anyProperties, allProperties, onlyProperties }) {
+class Manifest extends Node {
+  item({ id, href, anyProperties, allProperties, onlyProperties }) {
     if (onlyProperties) {
       return this.item({
         id,
         anyProperties,
         allProperties: onlyProperties,
-      }).filter((item) => item.properties().length === onlyProperties.length)
+      }).filter(
+        (item) => toArray(item.properties()).length === onlyProperties.length
+      )
     }
 
-    const expression = `./opf:item${idFilter(id)}${anyPropertiesFilter(
-      anyProperties
-    )}${allPropertiesFilter(allProperties)}`
+    const expression = `./opf:item${idFilter(id)}${attributeFilter(
+      '@href',
+      href
+    )}${anyPropertiesFilter(anyProperties)}${allPropertiesFilter(
+      allProperties
+    )}`
 
-    return this.mapAll(expression, (node) => new ManifestItem(node, this))
+    return this.resolveAll(expression, ManifestItem)
   }
 }
 
-class Identifier extends mix(Node).with(ID, Value, MetaProperties) {
+class Identifier extends mix(Node).with(Value, MetaProperties) {
   identifierType() {
     return this.resolveMetaProperty('identifier-type')
   }
 }
 
+class Title extends mix(Node).with(Value, I18n, MetaProperties) {
+  titleType() {
+    return this.resolveMetaProperty('title-type')
+  }
+}
+
+class Language extends mix(Node).with(Value, MetaProperties) {}
+
+class Contributor extends mix(Node).with(Value, I18n, MetaProperties) {
+  role() {
+    return this.resolveMetaProperty('role')
+  }
+}
+
+class Coverage extends mix(Node).with(Value, I18n, MetaProperties) {}
+
+class Creator extends Contributor {}
+
+class Date extends mix(Node).with(Value, MetaProperties) {}
+
+class Description extends mix(Node).with(Value, I18n, MetaProperties) {}
+
+class Format extends mix(Node).with(Value, MetaProperties) {}
+
+class Publisher extends mix(Node).with(Value, I18n, MetaProperties) {}
+
+class Relation extends mix(Node).with(Value, I18n, MetaProperties) {}
+
+class Rights extends mix(Node).with(Value, I18n, MetaProperties) {}
+
+class Source extends Identifier {
+  sourceOf() {
+    return this.resolveMetaProperty('source-of')
+  }
+}
+
+class Subject extends mix(Node).with(Value, I18n, MetaProperties) {
+  authority() {
+    return this.resolveMetaProperty('authority')
+  }
+
+  term() {
+    return this.resolveMetaProperty('term')
+  }
+}
+
+class Type extends mix(Node).with(Value, MetaProperties) {}
+
+class BelongsToCollection extends mix(Node).with(
+  Value,
+  I18n,
+  Refines,
+  MetaAttributes,
+  MetaProperties
+) {
+  identifier() {
+    return this.context.resolveMetaProperty(this.id(), 'dcterms:identifier')
+  }
+
+  collectionType() {
+    return this.context.resolveMetaProperty(this.id(), 'collection-type')
+  }
+
+  belongsToCollection() {
+    return this.context.resolveMetaPropertyAll(
+      this.id(),
+      'belongs-to-collection',
+      BelongsToCollection
+    )
+  }
+}
+
+class Link extends mix(Node).with(Resource, PropertiesList, Refines) {
+  rel() {
+    const rel = this.resolve('./@rel')
+    if (rel) {
+      //normalize spaces and split space separated words
+      return rel.replace(/\s+/g, ' ').split(' ')
+    }
+  }
+}
+
 class Metadata extends Node {
-  constructor(node) {
-    super(node)
+  constructor(node, context) {
+    super(node, context)
 
     this.metaPropertyMap = {}
 
@@ -352,14 +435,34 @@ class Metadata extends Node {
         this.metaPropertyMap[idRefined] = {}
       }
 
-      this.metaPropertyMap[idRefined][property] = meta
+      if (!this.metaPropertyMap[idRefined][property]) {
+        this.metaPropertyMap[idRefined][property] = []
+      }
+
+      this.metaPropertyMap[idRefined][property].push(meta)
     })
   }
 
+  resolveMetaProperty(id, property, constructor = Meta) {
+    return toArray(this.resolveMetaPropertyAll(id, property, constructor))[0]
+  }
+
+  resolveMetaPropertyAll(id, property, constructor = Meta) {
+    const propertyMap = this.metaPropertyMap[id]
+    if (!propertyMap) {
+      return null
+    }
+
+    const metaNodes = propertyMap[property]
+    if (!metaNodes) {
+      return null
+    }
+
+    return metaNodes.map((node) => new constructor(node, this.context))
+  }
+
   identifier({ id }) {
-    return this.resolveNode(`./dc:identifier${idFilter(id)}`, Identifier, {
-      metadata: this,
-    })
+    return this.resolve(`./dc:identifier${idFilter(id)}`, Identifier)
   }
 
   modified() {
@@ -367,22 +470,137 @@ class Metadata extends Node {
       "./opf:meta[@property='dcterms:modified' and not(@refines)]"
     )
     if (node) {
-      return new Meta(node, { metadata: this })
+      return new Meta(node, this.context)
     }
+  }
+
+  title({ id }) {
+    return this.resolveAll(`./dc:title${idFilter(id)}`, Title)
+  }
+
+  language({ id }) {
+    return this.resolveAll(`./dc:language${idFilter(id)}`, Language)
+  }
+
+  contributor({ id }) {
+    return this.resolveAll(`./dc:contributor${idFilter(id)}`, Contributor)
+  }
+
+  coverage({ id }) {
+    return this.resolveAll(`./dc:coverage${idFilter(id)}`, Coverage)
+  }
+
+  creator({ id }) {
+    return this.resolveAll(`./dc:creator${idFilter(id)}`, Creator)
+  }
+
+  date({ id }) {
+    return this.resolveAll(`./dc:date${idFilter(id)}`, Date)
+  }
+
+  description({ id }) {
+    return this.resolveAll(`./dc:description${idFilter(id)}`, Description)
+  }
+
+  format({ id }) {
+    return this.resolveAll(`./dc:format${idFilter(id)}`, Format)
+  }
+
+  publisher({ id }) {
+    return this.resolveAll(`./dc:publisher${idFilter(id)}`, Publisher)
+  }
+
+  relation({ id }) {
+    return this.resolveAll(`./dc:relation${idFilter(id)}`, Relation)
+  }
+
+  rights({ id }) {
+    return this.resolveAll(`./dc:rights${idFilter(id)}`, Rights)
+  }
+
+  source({ id }) {
+    return this.resolveAll(`./dc:source${idFilter(id)}`, Source)
+  }
+
+  subject({ id }) {
+    return this.resolveAll(`./dc:subject${idFilter(id)}`, Subject)
+  }
+
+  type({ id }) {
+    return this.resolveAll(`./dc:type${idFilter(id)}`, Type)
+  }
+
+  belongsToCollection({ id }) {
+    return this.resolveAll(
+      `./opf:meta${idFilter(
+        id
+      )}[@property='belongs-to-collection' and not(@refines)]`,
+      BelongsToCollection
+    )
+  }
+
+  meta({ id, property, refines }) {
+    return this.resolveAll(
+      `./opf:meta${idFilter(id)}${attributeFilter(
+        '@property',
+        property,
+        'and'
+      )}${attributeFilter('@refines', `#${refines}`, 'or')}`,
+      Meta
+    )
+  }
+
+  link(args) {
+    const {
+      id,
+      href,
+      anyProperties,
+      allProperties,
+      onlyProperties,
+      anyRel,
+      allRel,
+      onlyRel,
+    } = args
+
+    if (onlyProperties) {
+      return this.link({
+        ...args,
+        allProperties: onlyProperties,
+        onlyProperties: undefined,
+      }).filter(
+        (item) => toArray(item.properties()).length === onlyProperties.length
+      )
+    }
+
+    if (onlyRel) {
+      return this.link({ ...args, allRel: onlyRel, onlyRel: undefined }).filter(
+        (item) => toArray(item.rel()).length === onlyRel.length
+      )
+    }
+
+    const expression = `./opf:link${idFilter(id)}${attributeFilter(
+      '@href',
+      href
+    )}${anyPropertiesFilter(anyProperties)}${allPropertiesFilter(
+      allProperties
+    )}${anyRelFilter(anyRel)}${allRelFilter(allRel)}`
+
+    return this.resolveAll(expression, Link)
   }
 }
 
-export class Package extends mix(Node).with(ID, I18n) {
+export class Package extends mix(Node).with(I18n) {
   constructor(doc) {
     super(select('/opf:package', doc))
+    this.context = this
   }
 
   version() {
-    return this.resolveAttribute('./@version')
+    return this.resolve('./@version')
   }
 
   uniqueIdentifier() {
-    const uniqueIdentifierIDRef = this.resolveAttribute('./@unique-identifier')
+    const uniqueIdentifierIDRef = this.resolve('./@unique-identifier')
     if (uniqueIdentifierIDRef) {
       return this.metadata().identifier({ id: uniqueIdentifierIDRef })
     }
@@ -398,17 +616,15 @@ export class Package extends mix(Node).with(ID, I18n) {
 
   metadata() {
     return (this._metadata =
-      this._metadata || this.resolveNode('./opf:metadata', Metadata, {}))
+      this._metadata || this.resolve('./opf:metadata', Metadata))
   }
 
   spine() {
-    return (this._spine =
-      this._spine ||
-      this.resolveNode('./opf:spine', Spine, { manifest: this.manifest() }))
+    return (this._spine = this._spine || this.resolve('./opf:spine', Spine))
   }
 
   manifest() {
     return (this._manifest =
-      this._manifest || this.resolveNode('./opf:manifest', Manifest, {}))
+      this._manifest || this.resolve('./opf:manifest', Manifest))
   }
 }

@@ -16,7 +16,7 @@ interface Value {
 }
 
 interface Refines {
-  refines: String
+  refines: ID
 }
 
 interface MetaAttributes {
@@ -25,7 +25,7 @@ interface MetaAttributes {
 }
 
 interface MetaProperties {
-  alternateScript: Meta
+  alternateScript: [Meta]
   displaySeq: Meta
   fileAs: Meta
   groupPosition: Meta
@@ -49,12 +49,12 @@ type Meta implements Node & Value & I18n & Refines & MetaAttributes & MetaProper
   dir: String
   lang: String
 
-  refines: String
+  refines: ID
 
   property: String
   scheme: String
 
-  alternateScript: Meta
+  alternateScript: [Meta]
   displaySeq: Meta
   fileAs: Meta
   groupPosition: Meta
@@ -66,7 +66,7 @@ type Identifier implements Node & Value & MetaProperties {
 
   value: String
 
-  alternateScript: Meta
+  alternateScript: [Meta]
   displaySeq: Meta
   fileAs: Meta
   groupPosition: Meta
@@ -83,21 +83,21 @@ type Title implements Node & Value & I18n & MetaProperties {
   dir: String
   lang: String
 
-  alternateScript: Meta
+  alternateScript: [Meta]
   displaySeq: Meta
   fileAs: Meta
   groupPosition: Meta
   metaAuth: Meta @deprecated
 
   titleType: Meta
-} 
+}
 
 type Language implements Node & Value & MetaProperties {
   id: ID
 
   value: String
 
-  alternateScript: Meta
+  alternateScript: [Meta]
   displaySeq: Meta
   fileAs: Meta
   groupPosition: Meta
@@ -112,7 +112,7 @@ type Contributor implements Node & Value & I18n & MetaProperties {
   dir: String
   lang: String
 
-  alternateScript: Meta
+  alternateScript: [Meta]
   displaySeq: Meta
   fileAs: Meta
   groupPosition: Meta
@@ -129,7 +129,7 @@ type Coverage implements Node & Value & I18n & MetaProperties {
   dir: String
   lang: String
 
-  alternateScript: Meta
+  alternateScript: [Meta]
   displaySeq: Meta
   fileAs: Meta
   groupPosition: Meta
@@ -144,7 +144,7 @@ type Creator implements Node & Value & I18n & MetaProperties {
   dir: String
   lang: String
 
-  alternateScript: Meta
+  alternateScript: [Meta]
   displaySeq: Meta
   fileAs: Meta
   groupPosition: Meta
@@ -158,7 +158,7 @@ type Date implements Node & Value & MetaProperties {
 
   value: String
 
-  alternateScript: Meta
+  alternateScript: [Meta]
   displaySeq: Meta
   fileAs: Meta
   groupPosition: Meta
@@ -173,7 +173,7 @@ type Description implements Node & Value & I18n & MetaProperties {
   dir: String
   lang: String
 
-  alternateScript: Meta
+  alternateScript: [Meta]
   displaySeq: Meta
   fileAs: Meta
   groupPosition: Meta
@@ -185,7 +185,7 @@ type Format implements Node & Value & MetaProperties {
 
   value: String
 
-  alternateScript: Meta
+  alternateScript: [Meta]
   displaySeq: Meta
   fileAs: Meta
   groupPosition: Meta
@@ -200,7 +200,7 @@ type Publisher implements Node & Value & I18n & MetaProperties {
   dir: String
   lang: String
 
-  alternateScript: Meta
+  alternateScript: [Meta]
   displaySeq: Meta
   fileAs: Meta
   groupPosition: Meta
@@ -215,7 +215,7 @@ type Relation implements Node & Value & I18n & MetaProperties {
   dir: String
   lang: String
 
-  alternateScript: Meta
+  alternateScript: [Meta]
   displaySeq: Meta
   fileAs: Meta
   groupPosition: Meta
@@ -230,7 +230,7 @@ type Rights implements Node & Value & I18n & MetaProperties {
   dir: String
   lang: String
 
-  alternateScript: Meta
+  alternateScript: [Meta]
   displaySeq: Meta
   fileAs: Meta
   groupPosition: Meta
@@ -242,7 +242,7 @@ type Source implements Node & Value & MetaProperties {
 
   value: String
 
-  alternateScript: Meta
+  alternateScript: [Meta]
   displaySeq: Meta
   fileAs: Meta
   groupPosition: Meta
@@ -260,7 +260,7 @@ type Subject implements Node & Value & I18n & MetaProperties {
   dir: String
   lang: String
 
-  alternateScript: Meta
+  alternateScript: [Meta]
   displaySeq: Meta
   fileAs: Meta
   groupPosition: Meta
@@ -275,7 +275,7 @@ type Type implements Node & Value & MetaProperties {
 
   value: String
 
-  alternateScript: Meta
+  alternateScript: [Meta]
   displaySeq: Meta
   fileAs: Meta
   groupPosition: Meta
@@ -290,12 +290,12 @@ type BelongsToCollection implements Node & Value & I18n & Refines & MetaAttribut
   dir: String
   lang: String
 
-  refines: String
+  refines: ID
 
   property: String
   scheme: String
 
-  alternateScript: Meta
+  alternateScript: [Meta]
   displaySeq: Meta
   fileAs: Meta
   groupPosition: Meta
@@ -314,7 +314,9 @@ type Link implements Node & Resource & PropertiesList & Refines {
 
   properties: [String]
 
-  refines: String
+  refines: ID
+
+  rel: [String]
 }
 
 type Package implements Node & I18n {
@@ -336,25 +338,38 @@ type Package implements Node & I18n {
 
 type Metadata {
   identifier: Identifier
-  title: [Title]
-  language: [Language]
-
-  contributor: [Contributor]
-  coverage: [Coverage]
-  creator: [Creator]
-  date: [Date]
-  description: [Description]
-  format: [Format]
-  publisher: [Publisher]
-  relation: [Relation]
-  rights: [Rights]
-  source: [Source]
-  subject: [Subject]
-  type: [Type]
-
-  belongsToCollection: [BelongsToCollection]
-
   modified: Meta
+
+  title(id: [ID]): [Title]
+  language(id: [ID]): [Language]
+
+  contributor(id: [ID]): [Contributor]
+  coverage(id: [ID]): [Coverage]
+  creator(id: [ID]): [Creator]
+  date(id: [ID]): [Date]
+  description(id: [ID]): [Description]
+  format(id: [ID]): [Format]
+  publisher(id: [ID]): [Publisher]
+  relation(id: [ID]): [Relation]
+  rights(id: [ID]): [Rights]
+  source(id: [ID]): [Source]
+  subject(id: [ID]): [Subject]
+  type(id: [ID]): [Type]
+
+  belongsToCollection(id: [ID]): [BelongsToCollection]
+
+  meta(id: [ID], property: String, refines: ID): [Meta]
+
+  link(
+    id: [ID]
+    href: String
+    anyProperties: [String]
+    allProperties: [String]
+    onlyProperties: [String]
+    anyRel: [String]
+    allRel: [String]
+    onlyRel: [String]
+  ): [Link]
 }
 
 type Manifest implements Node {
@@ -362,6 +377,7 @@ type Manifest implements Node {
 
   item(
     id: [ID]
+    href: String
     anyProperties: [String]
     allProperties: [String]
     onlyProperties: [String]
