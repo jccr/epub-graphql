@@ -22,5 +22,7 @@
   - [x] Query resolvers
   - [ ] Processing IRI
 - [ ] [4.3 Package Rendering Metadata](https://w3c.github.io/publ-epub-revision/epub32/spec/epub-packages.html#sec-package-metadata-rendering)
-  - [x] Syntax
+  - [x] Raw value
+  - [ ] Syntax
+  - [ ] Query resolvers
   - [ ] Processing IRI
