@@ -3,6 +3,7 @@
 [EPUB 3.2 Packages](https://w3c.github.io/publ-epub-revision/epub32/spec/epub-packages.html) `=>` [GraphQL.js](https://graphql.org/graphql-js/)
 
 ## Features
+- [ ] Test suite
 - [x] [3.4.1 The `package` Element](https://w3c.github.io/publ-epub-revision/epub32/spec/epub-packages.html#sec-package-elem)
 - [x] [3.4.2 Shared Attributes](https://w3c.github.io/publ-epub-revision/epub32/spec/epub-packages.html#sec-shared-attrs)
 - [x] [3.4.3 Metadata](https://w3c.github.io/publ-epub-revision/epub32/spec/epub-packages.html#sec-pkg-metadata)
