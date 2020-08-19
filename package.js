@@ -1,17 +1,5 @@
 import xpath from 'xpath'
 
-let mix = (superclass) => new MixinBuilder(superclass)
-
-class MixinBuilder {
-  constructor(superclass) {
-    this.superclass = superclass
-  }
-
-  with(...mixins) {
-    return mixins.reduce((c, mixin) => mixin(c), this.superclass)
-  }
-}
-
 const namespaceMap = {
   xml: 'http://www.w3.org/XML/1998/namespace',
   opf: 'http://www.idpf.org/2007/opf',
@@ -22,6 +10,49 @@ const selectAll = xpath.useNamespaces(namespaceMap)
 const select = function (expression, node) {
   return selectAll(expression, node, true)
 }
+
+/**
+ * inverse of `namespaceMap`
+ * ```
+ *  {
+ *    'http://www.idpf.org/2007/opf': 'opf',
+ *    ...
+ *  }
+ * ```
+ */
+const prefixMap = Object.assign(
+  {},
+  ...Object.entries(namespaceMap).map(([prefix, namespace]) => ({
+    [namespace]: prefix,
+  }))
+)
+
+const nodeTypeMap = () => ({
+  'opf:package': Package,
+  'opf:metadata': Metadata,
+  'opf:manifest': Manifest,
+  'opf:spine': Spine,
+  'opf:meta': Meta,
+  'opf:item': ManifestItem,
+  'opf:itemref': SpineItem,
+  'opf:link': Link,
+  // 'opf:collection': Collection,
+  'dc:identifier': Identifier,
+  'dc:title': Title,
+  'dc:language': Language,
+  'dc:contributor': Contributor,
+  'dc:coverage': Coverage,
+  'dc:creator': Creator,
+  'dc:date': Date,
+  'dc:description': Description,
+  'dc:format': Format,
+  'dc:publisher': Publisher,
+  'dc:relation': Relation,
+  'dc:rights': Rights,
+  'dc:source': Source,
+  'dc:subject': Subject,
+  'dc:type': Type,
+})
 
 class Node {
   constructor(node, context) {
@@ -61,6 +92,18 @@ class Node {
 
   id() {
     return this.resolve('./@id')
+  }
+}
+
+let mix = (superclass) => new MixinBuilder(superclass)
+
+class MixinBuilder {
+  constructor(superclass) {
+    this.superclass = superclass
+  }
+
+  with(...mixins) {
+    return mixins.reduce((c, mixin) => mixin(c), this.superclass)
   }
 }
 
@@ -115,10 +158,21 @@ const Refines = (superclass) =>
       }
 
       // drop the # prefix
-      return refines[0] === '#' ? refines.substr(1) : refines
+      const idRefined = refines[0] === '#' ? refines.substr(1) : refines
+      const node = this.context.select(`//*[@id='${idRefined}']`)
+      if (!node) {
+        return null
+      }
 
-      // TODO: Resolve the reference...
-      // return this.context.resolve(`//*[@id='${idRefined}']`, Node)
+      const name = node.localName
+      const namespace = node.namespaceURI
+      const prefix = prefixMap[namespace]
+      const typeConstructor = nodeTypeMap()[`${prefix}:${name}`]
+      if (!typeConstructor) {
+        return null
+      }
+
+      return new typeConstructor(node, this.context)
     }
   }
 
@@ -127,7 +181,7 @@ const PropertiesList = (superclass) =>
     properties() {
       const properties = this.resolve('./@properties')
       if (properties) {
-        //normalize spaces and split space separated words
+        // normalize spaces and split space separated words
         return properties.replace(/\s+/g, ' ').split(' ')
       }
     }
@@ -179,7 +233,11 @@ class Meta extends mix(Node).with(
   Refines,
   MetaAttributes,
   MetaProperties
-) {}
+) {
+  get __typename() {
+    return 'Meta'
+  }
+}
 
 const toArray = (valueOrArray) => {
   if (!valueOrArray) {
@@ -221,6 +279,10 @@ const allRelFilter = (allProperties) =>
   attributeContainsWordFilter('@rel', allProperties, 'and')
 
 class Spine extends Node {
+  get __typename() {
+    return 'Spine'
+  }
+
   pageProgressionDirection() {
     return this.resolve('./@page-progression-direction')
   }
@@ -261,6 +323,10 @@ class Spine extends Node {
 }
 
 class SpineItem extends mix(Node).with(PropertiesList) {
+  get __typename() {
+    return 'SpineItem'
+  }
+
   idref() {
     const idref = this.resolve('./@idref')
     if (idref) {
@@ -278,6 +344,10 @@ class SpineItem extends mix(Node).with(PropertiesList) {
 }
 
 class ManifestItem extends mix(Node).with(Resource, PropertiesList) {
+  get __typename() {
+    return 'ManifestItem'
+  }
+
   mediaOverlay() {
     const idref = this.resolve('./@media-overlay')
     if (idref) {
@@ -294,6 +364,10 @@ class ManifestItem extends mix(Node).with(Resource, PropertiesList) {
 }
 
 class Manifest extends Node {
+  get __typename() {
+    return 'Manifest'
+  }
+
   item({ id, href, anyProperties, allProperties, onlyProperties }) {
     if (onlyProperties) {
       return this.item({
@@ -317,48 +391,104 @@ class Manifest extends Node {
 }
 
 class Identifier extends mix(Node).with(Value, MetaProperties) {
+  get __typename() {
+    return 'Identifier'
+  }
+
   identifierType() {
     return this.resolveMetaProperty('identifier-type')
   }
 }
 
 class Title extends mix(Node).with(Value, I18n, MetaProperties) {
+  get __typename() {
+    return 'Title'
+  }
+
   titleType() {
     return this.resolveMetaProperty('title-type')
   }
 }
 
-class Language extends mix(Node).with(Value, MetaProperties) {}
+class Language extends mix(Node).with(Value, MetaProperties) {
+  get __typename() {
+    return 'Language'
+  }
+}
 
 class Contributor extends mix(Node).with(Value, I18n, MetaProperties) {
+  get __typename() {
+    return 'Contributor'
+  }
+
   role() {
     return this.resolveMetaProperty('role')
   }
 }
 
-class Coverage extends mix(Node).with(Value, I18n, MetaProperties) {}
+class Coverage extends mix(Node).with(Value, I18n, MetaProperties) {
+  get __typename() {
+    return 'Coverage'
+  }
+}
 
-class Creator extends Contributor {}
+class Creator extends Contributor {
+  get __typename() {
+    return 'Creator'
+  }
+}
 
-class Date extends mix(Node).with(Value, MetaProperties) {}
+class Date extends mix(Node).with(Value, MetaProperties) {
+  get __typename() {
+    return 'Date'
+  }
+}
 
-class Description extends mix(Node).with(Value, I18n, MetaProperties) {}
+class Description extends mix(Node).with(Value, I18n, MetaProperties) {
+  get __typename() {
+    return 'Description'
+  }
+}
 
-class Format extends mix(Node).with(Value, MetaProperties) {}
+class Format extends mix(Node).with(Value, MetaProperties) {
+  get __typename() {
+    return 'Format'
+  }
+}
 
-class Publisher extends mix(Node).with(Value, I18n, MetaProperties) {}
+class Publisher extends mix(Node).with(Value, I18n, MetaProperties) {
+  get __typename() {
+    return 'Publisher'
+  }
+}
 
-class Relation extends mix(Node).with(Value, I18n, MetaProperties) {}
+class Relation extends mix(Node).with(Value, I18n, MetaProperties) {
+  get __typename() {
+    return 'Relation'
+  }
+}
 
-class Rights extends mix(Node).with(Value, I18n, MetaProperties) {}
+class Rights extends mix(Node).with(Value, I18n, MetaProperties) {
+  get __typename() {
+    return 'Rights'
+  }
+}
 
 class Source extends Identifier {
+  get __typename() {
+    return 'Source'
+  }
+
   sourceOf() {
     return this.resolveMetaProperty('source-of')
   }
 }
 
 class Subject extends mix(Node).with(Value, I18n, MetaProperties) {
+  get __typename() {
+    return 'Subject'
+  }
+
   authority() {
     return this.resolveMetaProperty('authority')
   }
@@ -368,7 +498,11 @@ class Subject extends mix(Node).with(Value, I18n, MetaProperties) {
   }
 }
 
-class Type extends mix(Node).with(Value, MetaProperties) {}
+class Type extends mix(Node).with(Value, MetaProperties) {
+  get __typename() {
+    return 'Type'
+  }
+}
 
 class BelongsToCollection extends mix(Node).with(
   Value,
@@ -377,6 +511,10 @@ class BelongsToCollection extends mix(Node).with(
   MetaAttributes,
   MetaProperties
 ) {
+  get __typename() {
+    return 'BelongsToCollection'
+  }
+
   identifier() {
     return this.context.resolveMetaProperty(this.id(), 'dcterms:identifier')
   }
@@ -395,16 +533,24 @@ class BelongsToCollection extends mix(Node).with(
 }
 
 class Link extends mix(Node).with(Resource, PropertiesList, Refines) {
+  get __typename() {
+    return 'Link'
+  }
+
   rel() {
     const rel = this.resolve('./@rel')
     if (rel) {
-      //normalize spaces and split space separated words
+      // normalize spaces and split space separated words
       return rel.replace(/\s+/g, ' ').split(' ')
     }
   }
 }
 
 class Metadata extends Node {
+  get __typename() {
+    return 'Metadata'
+  }
+
   constructor(node, context) {
     super(node, context)
 
@@ -545,7 +691,7 @@ class Metadata extends Node {
         '@property',
         property,
         'and'
-      )}${attributeFilter('@refines', `#${refines}`, 'or')}`,
+      )}${attributeFilter('@refines', refines ? `#${refines}` : null, 'or')}`,
       Meta
     )
   }
@@ -590,6 +736,10 @@ class Metadata extends Node {
 }
 
 export class Package extends mix(Node).with(I18n) {
+  get __typename() {
+    return 'Package'
+  }
+
   constructor(doc) {
     super(select('/opf:package', doc))
     this.context = this
