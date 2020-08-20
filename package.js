@@ -200,30 +200,42 @@ const MetaAttributes = (superclass) =>
 
 const MetaProperties = (superclass) =>
   class extends superclass {
+    resolveMetaProperty(property, constructor = Meta) {
+      return toArray(this.resolveMetaPropertyList(property, constructor))[0]
+    }
+
+    resolveMetaPropertyList(property, constructor = Meta) {
+      const propertyMap = this.context.metadata().metaPropertyMap[this.id()]
+      if (!propertyMap) {
+        return null
+      }
+
+      const metaNodes = propertyMap[property]
+      if (!metaNodes) {
+        return null
+      }
+
+      return metaNodes.map((node) => new constructor(node, this.context))
+    }
+
     alternateScript() {
-      return this.context
-        .metadata()
-        .resolveMetaPropertyAll(this.id(), 'alternate-script')
+      return this.resolveMetaPropertyList('alternate-script')
     }
 
     displaySeq() {
-      return this.context
-        .metadata()
-        .resolveMetaProperty(this.id(), 'display-seq')
+      return this.resolveMetaProperty('display-seq')
     }
 
     fileAs() {
-      return this.context.metadata().resolveMetaProperty(this.id(), 'file-as')
+      return this.resolveMetaProperty('file-as')
     }
 
     groupPosition() {
-      return this.context
-        .metadata()
-        .resolveMetaProperty(this.id(), 'group-position')
+      return this.resolveMetaProperty('group-position')
     }
 
     metaAuth() {
-      return this.context.metadata().resolveMetaProperty(this.id(), 'meta-auth')
+      return this.resolveMetaProperty('meta-auth')
     }
   }
 
@@ -516,16 +528,15 @@ class BelongsToCollection extends mix(Node).with(
   }
 
   identifier() {
-    return this.context.resolveMetaProperty(this.id(), 'dcterms:identifier')
+    return this.resolveMetaProperty('dcterms:identifier')
   }
 
   collectionType() {
-    return this.context.resolveMetaProperty(this.id(), 'collection-type')
+    return this.resolveMetaProperty('collection-type')
   }
 
   belongsToCollection() {
-    return this.context.resolveMetaPropertyAll(
-      this.id(),
+    return this.resolveMetaPropertyAll(
       'belongs-to-collection',
       BelongsToCollection
     )
@@ -589,11 +600,13 @@ class Metadata extends Node {
     })
   }
 
-  resolveMetaProperty(id, property, constructor = Meta) {
-    return toArray(this.resolveMetaPropertyAll(id, property, constructor))[0]
+  resolveMetaItemProperty(id, property, constructor = Meta) {
+    return toArray(
+      this.resolveMetaItemPropertyAll(id, property, constructor)
+    )[0]
   }
 
-  resolveMetaPropertyAll(id, property, constructor = Meta) {
+  resolveMetaItemPropertyAll(id, property, constructor = Meta) {
     const propertyMap = this.metaPropertyMap[id]
     if (!propertyMap) {
       return null
